@@ -1,0 +1,89 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
+
+# =============================
+# Configuration
+# =============================
+CSV = "categorized_words.csv"   
+CHUNK_SIZE = 100               
+OUTDIR = "chunked_plots_100"
+os.makedirs(OUTDIR, exist_ok=True)
+
+CATEGORY_COLORS = {
+    "Germanic": "#2ecc71",  # green
+    "French":   "#3498db",  # blue
+    "Latin":    "#e74c3c",  # red
+    "Other":    "#bdbdbd"   # grey
+}
+
+# =============================
+# Load the CSV
+# =============================
+df = pd.read_csv(CSV)
+
+# Normalize naming
+df["Category"] = df["Category"].str.strip().str.capitalize()
+
+# If someone wrote "Old Norse" "Greek" etc, collapse to Other
+df.loc[~df["Category"].isin(["Germanic", "French", "Latin"]), "Category"] = "Other"
+
+# =============================
+# Split into chunks of 100 and count
+# =============================
+chunks = []
+labels = []
+
+for i in range(0, len(df), CHUNK_SIZE):
+    chunk = df.iloc[i:i + CHUNK_SIZE]
+    label = f"{i+1}-{i+len(chunk)}"
+    labels.append(label)
+
+    counts = chunk["Category"].value_counts()
+    chunks.append([
+        counts.get("Germanic", 0),
+        counts.get("French", 0),
+        counts.get("Latin", 0),
+        counts.get("Other", 0)
+    ])
+
+# Convert to dataframe
+chunk_df = pd.DataFrame(chunks, columns=["Germanic", "French", "Latin", "Other"])
+chunk_df.index = labels
+
+# Convert to percentage
+chunk_pct = chunk_df.div(chunk_df.sum(axis=1), axis=0) * 100
+
+# =============================
+# Plot stacked bar chart
+# =============================
+plt.figure(figsize=(16, 6))
+
+bottom = None
+for col in chunk_pct.columns:
+    plt.bar(chunk_pct.index, chunk_pct[col],
+            bottom=bottom,
+            label=col,
+            color=CATEGORY_COLORS[col])
+    bottom = chunk_pct[col] if bottom is None else bottom + chunk_pct[col]
+
+plt.title("Origin of English Words",
+          fontsize=20, weight="bold", pad=30 )
+# Subtitle (smaller, centered under title)
+plt.text(
+    0.5, 1.03,
+    "Each bar represents 100 words, ordered by frequency (1-100 most common 100 words).",
+    ha="center", va="center", transform=plt.gca().transAxes, fontsize=12
+)
+
+plt.ylabel("Percentage of words in block", fontsize=12)
+plt.xticks(rotation=70, fontsize=10)
+plt.yticks(fontsize=10)
+
+plt.legend(title="Word Origin", bbox_to_anchor=(1.03, 1), loc="upper left")
+plt.tight_layout()
+plt.savefig(os.path.join(OUTDIR, "chunks_percent_share_100.png"), dpi=300)
+plt.show()
+
+print("\nSaved:", os.path.join(OUTDIR, "chunks_percent_share_100.png"))
+print("Chunk size =", CHUNK_SIZE)
